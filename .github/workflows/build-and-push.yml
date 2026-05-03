@@ -1,0 +1,77 @@
+name: Build and Push Containers
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_APP: ${{ github.repository }}/service_app
+  IMAGE_NAME_REPORTING: ${{ github.repository }}/reporting_worker
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+      with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build service app
+      - name: Extract metadata for Service App
+        id: meta_app
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_APP }}
+          flavor: |
+            latest=auto
+            tags: |
+              type=ref,event=branch
+              type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+      - name: Build and push Service App
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/service_app/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_app.outputs.tags }}
+          labels: ${{ steps.meta_app.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      # Build reporting worker
+      - name: Extract metadata for Reporting
+        id: meta_reporting
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_REPORTING }}
+          flavor: |
+            latest=auto
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+      - name: Build and push Reporting
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/reporting/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_reporting.outputs.tags }}
+          labels: ${{ steps.meta_reporting.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
