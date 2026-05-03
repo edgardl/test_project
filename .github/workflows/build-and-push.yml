@@ -10,6 +10,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME_APP: ${{ github.repository }}/service_app
   IMAGE_NAME_REPORTING: ${{ github.repository }}/reporting_worker
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -36,9 +37,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_APP }}
           flavor: |
             latest=auto
-            tags: |
-              type=ref,event=branch
-              type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
 
       # Build service app
       - name: Build and push Service App
