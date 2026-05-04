@@ -1,0 +1,2 @@
+#!/bin/sh
+exec chpst -u appuser starman --port 8080 /app/feedback_app.psgi
