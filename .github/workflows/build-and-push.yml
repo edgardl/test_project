@@ -48,7 +48,7 @@ jobs:
       - name: Build and push Service App
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./docker/service_app
           file: ./docker/service_app/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_app.outputs.tags }}
@@ -71,7 +71,7 @@ jobs:
       - name: Build and push Reporting
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./docker/reporting
           file: ./docker/reporting/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_reporting.outputs.tags }}
