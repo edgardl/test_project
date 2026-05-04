@@ -21,6 +21,7 @@ my $DB_NAME     = $ENV{DB_NAME};
 my $DB_PASSWORD = $ENV{DB_PASSWORD};
 
 # Create DB connector
+$log->debug("Creating DB connector");
 my $dsn = "DBI:Pg:dbname=$DB_NAME;host=$DB_HOST;port=5432";
 my $DB_CONN = DBIx::Connector->new($dsn, 'postgres', $DB_PASSWORD, {
     RaiseError => 1,
@@ -30,6 +31,7 @@ my $DB_CONN = DBIx::Connector->new($dsn, 'postgres', $DB_PASSWORD, {
 
 # Establish DB connection
 sub get_dbh {
+    $log->debug("Returning DB handler");
     # Use DB connection to automatically re-connect if necessary
     return $DB_CONN->dbh;
 }
@@ -37,6 +39,7 @@ sub get_dbh {
 # Validate existence of table
 sub ensure_schema {
     my ($dbh) = @_;
+    $log->info("Validating schema");
     my $sql = qq{
         CREATE TABLE IF NOT EXISTS $DB_TABLE (
             id SERIAL PRIMARY KEY,
@@ -45,6 +48,7 @@ sub ensure_schema {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     };
+    $log->debug(sprintf "SQL query: %s", $sql);
     $dbh->do($sql);
 }
 
@@ -52,6 +56,8 @@ sub ensure_schema {
 sub render_form {
     my ($csrf) = @_;
 
+    $log->debug("Rendering HTML form");
+    
     # Escape to prevent cross-site scripting
     my $safe_csrf = escape_html($csrf);
     
@@ -79,12 +85,14 @@ HTML
 
 # CSRF helper
 sub generate_csrf {
+    $log->debug("Generating CSRF");
     return sha256_hex(rand() . time() . $$);
 }
 
 # Escape html data
 sub escape_html {
-    my $s = shift // ''; 
+    my $s = shift // '';
+    $log->debug(sprintf "Escaping string \"%s\"", $s);
     $s =~ s/&/&amp;/g;
     $s =~ s/</&lt;/g;
     $s =~ s/>/&gt;/g;
@@ -98,8 +106,9 @@ my $app = sub {
     my $req = Plack::Request->new($env);
 
     # Simple request logging
-    $log->info(sprintf "%s %s from %s", $req->method, $req->request_uri, ($env->{REMOTE_ADDR} || '-'));
+    $log->info(sprintf "%s %s", $req->method, $req->path_info);
 
+    $log->debug("Creating session");
     my $session = $env->{'psgix.session'};
     
     # GET / (feedback form)
@@ -116,10 +125,12 @@ my $app = sub {
     # POST /submit
     if ($req->method eq 'POST' && $req->path_info eq '/submit') {
         my $params = $req->body_parameters;
+	$log->info("Submitting feedback");
         
         # Basic CSRF check
 	my $stored_token = $session->{csrf_token} // '';
         if (!$params->{csrf_token} || $params->{csrf_token} ne $stored_token) {
+	    $log->warn("Forbidden: CSRF Failure");
             return [
 		403,
 		['Content-Type' => 'text/plain'],
@@ -130,14 +141,15 @@ my $app = sub {
         eval {
             my $dbh = get_dbh();
             ensure_schema($dbh);
-	    
-            # Insert using placeholders
+
+	    $log->info("Attempting to insert data into table");
+            # Insert using placeholders	    
             my $sth = $dbh->prepare("INSERT INTO $DB_TABLE (user_comment, sentiment) VALUES (?, ?::boolean)");
             $sth->execute($params->{comment}, $params->{sentiment});
         };
 
         if ($@) {
-            $log->error("Database error: $@");
+            $log->error(sprintf "Database error: %s", $@);
             return [
 		500,
 		['Content-Type' => 'text/plain'],
@@ -153,6 +165,7 @@ my $app = sub {
     }
 
     if ($req->path_info eq '/success') {
+	$log->info("Successfully added data into the table!");
         return [
 	    200,
 	    ['Content-Type' => 'text/html'],
@@ -162,6 +175,7 @@ my $app = sub {
     
     # GET /health
     if ($req->method eq 'GET' && $req->path_info eq '/health') {
+	$log->info("Checking health of the service app");
 	my $dbh;
 	
 	#Check Connection
@@ -170,7 +184,7 @@ my $app = sub {
         };
 
         if ($@ || !defined $dbh) {
-            $log->error("Health check failed: Database connection error: $@");
+            $log->error(sprintf "Health check failed: Database connection error: %s", $@);
             return [
                 500,
                 ['Content-Type' => 'text/plain'],
@@ -185,7 +199,7 @@ my $app = sub {
         };
 
         if (!$db_ok) {
-            $log->error("Health check failed: Table verification error: $@");
+            $log->error(sprintf "Health check failed: Table verification error: %s", $@);
             return [
                 400,
                 ['Content-Type' => 'text/plain'],
@@ -201,11 +215,12 @@ my $app = sub {
         ];
     }
 
+    $log->info("Invalid path received. Not found")
     return [
 	404,
 	['Content-Type' => 'text/plain'],
-	['Not Found']]
-    ;
+	['Not Found']
+    ];
 };
 
 builder {
