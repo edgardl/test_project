@@ -68,6 +68,10 @@ sub render_form {
 <body>
     <h1>Feedback Form</h1>
     <form action="/submit" method="POST">
+        <div style="display:none;">
+        <label>Leave this field empty</label>
+        <input type="text" name="hp_email_verification" value="">
+        </div>
         <input type="hidden" name="csrf_token" value="$safe_csrf">
         <label>Experience:</label>
         <select name="sentiment" required>
@@ -126,7 +130,17 @@ my $app = sub {
     if ($req->method eq 'POST' && $req->path_info eq '/submit') {
         my $params = $req->body_parameters;
 	$log->info("Submitting feedback");
-        
+
+	# Very basic honeypot check
+	if ($params->{hp_email_verification}) {
+	    $log->info("Looks like we got a bot, returning 200 but not saving anything");
+	    return [
+		200,
+		['Content-Type' => 'text/plain'],
+		["Feedback received!"]
+	    ];
+	}
+	
         # Basic CSRF check
 	my $stored_token = $session->{csrf_token} // '';
         if (!$params->{csrf_token} || $params->{csrf_token} ne $stored_token) {
