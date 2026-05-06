@@ -32,9 +32,10 @@ RUN mkdir -p /var/cache/nginx /var/run && \
 RUN chown -R www-data:www-data /var/lib/nginx /var/log/nginx
 
 # App Setup
-WORKDIR /app
-COPY scripts/feedback_app.psgi .
-RUN chown -R appuser:appuser /app
+# Copy script into the path runit and starman expect
+RUN mkdir -p /etc/runit/runsvdir/default/starman/scripts
+COPY scripts/feedback_app.psgi /etc/runit/runsvdir/default/starman/scripts/
+RUN chown -R appuser:appuser /etc/runit/runsvdir/default/starman/scripts
 
 # Setup Runit Services
 # Copy service scripts into the runit directory

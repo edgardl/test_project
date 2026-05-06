@@ -20,7 +20,7 @@ create_reviewer_user() {
     reviewer_password=$(openssl rand -base64 12)
     reviewer_file="/etc/reviewer"
     if ! id "$reviewer_user" >/dev/null 2>&1; then
-	echo "Creating user \"$reviewer_user\""
+	echo -e "\n\nCreating user \"$reviewer_user\""
 	useradd -m -s /bin/bash "$reviewer_user"
 	echo "$reviewer_user:$reviewer_password" | chpasswd
 	usermod -aG sudo "$reviewer_user"
@@ -33,7 +33,7 @@ create_reviewer_user() {
 	chown root:root "$reviewer_file"
 	chmod 600 "$reviewer_file"
     fi
-    echo "\nNOTE:\n user: $reviewer_user\n password: Check $reviewer_file"
+    echo -e "\nUSER INFORMATION:\n user: $reviewer_user\n password: Check $reviewer_file\n\n"
 }
 #############################################################################
 
@@ -72,9 +72,9 @@ system_setup() {
 
     # Install docker, perl, and postgres
     log_info "Installing docker and dependencies"
-    package_list="docker.io perl-modules openssl fail2ban"
+    package_list="docker.io perl-modules openssl fail2ban openssh-server"
     log_debug "Installing packages: $package_list"
-    apt-get install -y "$package_list"
+    apt-get install -y $package_list
 }
 
 firewall_setup() {
@@ -199,11 +199,11 @@ worker_setup() {
     # Schedule the 24-hour report (1:00 AM)
     local cron_cmd="0 1 * * * /usr/bin/docker run --rm --network $NETWORK --log-opt max-size=10m --log-opt max-file=3 --env-file $APP_ENV_FILE --env-file $ASANA_ENV_FILE $worker_artifact # reporting_worker_cron"
 
-    # Add to crontab (only if it doesn't exist)    
+    # Add to crontab (only if it doesn't exist)
     if ! crontab -l 2>/dev/null | grep -q "reporting_worker_cron"; then
-	log_info "Adding crontab entry for reporting worker"
-	log_debug "Entry: $cron_cmd"
-	(crontab -l 2>/dev/null ; echo "$cron_cmd") | crontab -
+        log_info "Adding crontab entry for reporting worker"
+        log_debug "Entry: $cron_cmd"
+        (crontab -l 2>/dev/null || true; echo "$cron_cmd") | crontab -
     fi
 }
 
@@ -251,6 +251,8 @@ secrets_setup() {
 }
 
 main() {
+    log_info "================ START ================"
+    
     # Validate Asana token is present before doing anything
     if [[ -z "${ASANA_TOKEN:-}" ]]; then
         if [[ -f "$ASANA_ENV_FILE" ]]; then
@@ -261,6 +263,7 @@ main() {
             ASANA_TOKEN=$(cat /etc/asana)
         else
             log_error "ASANA_TOKEN required. Pass it as a variable, or put it in /etc/asana"
+	    show_help
             exit 1
         fi
     fi
@@ -268,6 +271,8 @@ main() {
     log_info "Getting the system ready..."
     system_setup
     firewall_setup
+    sshd_setup
+    start_fail2ban
 
     log_info "Getting docker environment ready..."
     secrets_setup
@@ -285,6 +290,9 @@ main() {
 
     # Give reviewer access to this machine
     create_reviewer_user
+
+    log_info "Check $LOG_FILE to access the log of this execution"
+    "================= END ================="
 }
 
 show_help() {
@@ -296,7 +304,7 @@ This script provisions the feedback system on an Ubuntu server.
 Requirements:
   ASANA_TOKEN    If this is an initial setup, the token must be
                  passed as an environment variable OR stored in
-                 /etc/asana for initial setup.
+                 /etc/asana file.
 
 Options:
   -v             Enable verbose (DEBUG) mode for detailed logging.
