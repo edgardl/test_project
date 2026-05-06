@@ -142,6 +142,15 @@ env_setup() {
 start_db() {
     log_info "Starting PostgreSQL"
     /usr/bin/docker pull postgres:15
+    
+    # Gracefully stop the DB container (if already exists)
+    if docker ps -a --format '{{.Names}}' | grep -q "^$DB_HOST$"; then
+	log_info "Stopping existing database gracefully"
+	/usr/bin/docker stop -t 30 "$DB_HOST" || true
+	/usr/bin/docker rm "$DB_HOST" || true
+    fi
+
+    # Start postgres container
     /usr/bin/docker run -d \
 		    --name "$DB_HOST" \
 		    --network "$NETWORK" \
@@ -177,6 +186,13 @@ start_app() {
     log_debug "Image: $app_artifact"
     /usr/bin/docker pull "$app_artifact"
 
+    # Gracefully stop the service app (if already exists)
+    if docker ps -a --format '{{.Names}}' | grep -q "^$SERVICE_APP$"; then
+	log_info "Stopping existing service app gracefully"
+	/usr/bin/docker stop "$SERVICE_APP" || true
+	/usr/bin/docker rm "$SERVICE_APP" || true
+    fi
+    
     # Starting feedback app container
     log_info "Starting $SERVICE_APP container"
     /usr/bin/docker run -d \

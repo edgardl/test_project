@@ -18,6 +18,7 @@ RUN cpanm --notest \
     Starman \
     DBI \
     DBD::Pg \
+    DBIx::Connector \
     JSON::MaybeXS \
     Log::Any \
     Log::Any::Adapter
