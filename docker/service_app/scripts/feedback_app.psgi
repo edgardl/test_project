@@ -229,7 +229,7 @@ my $app = sub {
         ];
     }
 
-    $log->info("Invalid path received. Not found")
+    $log->info("Invalid path received. Not found");
     return [
 	404,
 	['Content-Type' => 'text/plain'],
@@ -237,10 +237,10 @@ my $app = sub {
     ];
 };
 
-builder {
+builder { sub {
     # Persistent even if the server restarts
     enable "Session", store => "File";
     enable "StackTrace";
     enable "ContentLength"; 
     $app;
-};
+}};
