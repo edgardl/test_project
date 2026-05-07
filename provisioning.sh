@@ -228,11 +228,13 @@ secrets_setup() {
     local db_password
 
     # Check if the password was previously generated (We don't want to lose an existing DB)
-    if [[ -f "$APP_ENV_FILE" ]]; then
-        log_info "Found existing environment file. Extracting current password"
+    if [[ -d "/var/lib/$DB_HOST/base" ]] && [[ -f "$APP_ENV_FILE" ]]; then
+        log_info "Database volume detected. Keeping existing credentials"
+        db_password=$(grep "POSTGRES_PASSWORD=" "$APP_ENV_FILE" | cut -d'=' -f2)
+    elif [[ -f "$APP_ENV_FILE" ]]; then
         db_password=$(grep "POSTGRES_PASSWORD=" "$APP_ENV_FILE" | cut -d'=' -f2)
     else
-        log_info "No existing secrets found. Generating new database password"
+        log_info "Generating new secure database password"
         db_password=$(openssl rand -base64 24)
     fi
     
@@ -244,6 +246,7 @@ secrets_setup() {
     {
 	# For postgres docker image
 	echo "POSTGRES_PASSWORD=$db_password"
+	echo "POSTGRES_DB=$DB_NAME"
 	# For feedback app
         echo "DB_PASSWORD=$db_password"
         echo "DB_NAME=$DB_NAME"

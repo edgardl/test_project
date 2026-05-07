@@ -206,6 +206,11 @@ my $app = sub {
             ];
         }
 
+	# Create schema if it's not there yet
+	eval {
+	    ensure_schema($dbh);
+	};
+
         # Check query execution (Read-only)
         my $db_ok = eval {
             $dbh->do("SELECT 1 FROM $DB_TABLE LIMIT 1");
