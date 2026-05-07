@@ -308,7 +308,7 @@ main() {
     create_reviewer_user
 
     log_info "Check $LOG_FILE to access the log of this execution"
-    "================= END ================="
+    log_info "================= END ================="
 }
 
 show_help() {
