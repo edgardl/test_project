@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y \
 # Add user with no login shell or home
 RUN adduser --system --group --no-create-home appuser
 
-# Install Perl dependencies
+# Install Perl dependencies                                                                                                                                                                                                                 
 RUN cpanm --notest \
     Plack \
+    Plack::Middleware::Session \
     Starman \
     DBI \
     DBD::Pg \
@@ -22,6 +23,13 @@ RUN cpanm --notest \
     JSON::MaybeXS \
     Log::Any \
     Log::Any::Adapter
+
+# Copy tests and scripts to a temp area for validation
+COPY unit_tests/ /tmp/unit_tests/
+COPY scripts/ /tmp/scripts/
+
+# Run tests from the renamed directory
+RUN prove -lr /tmp/unit_tests/
 
 # Nginx Config
 RUN rm -f /etc/nginx/nginx.conf /etc/nginx/sites-enabled/default
@@ -51,7 +59,7 @@ RUN chown -R appuser:appuser /etc/runit/runsvdir/default/starman/scripts
 COPY services /etc/service/
 RUN chmod +x /etc/service/nginx/run && chmod +x /etc/service/starman/run
 
-EXPOSE 80
+EXPOSE 9999
 
 # Use runsvdir to manage the /etc/service directory
 CMD ["runsvdir", "-P", "/etc/service"]
