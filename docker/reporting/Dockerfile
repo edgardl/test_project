@@ -16,10 +16,22 @@ RUN cpanm --notest \
     JSON::MaybeXS \
     Net::SSLeay \
     IO::Socket::SSL \
+    Test::More \
     Mozilla::CA
 
 WORKDIR /app
 COPY scripts/report_to_asana.pl .
 
-# No EXPOSE needed as it's not a server
-CMD ["perl", "report_to_asana.pl"]
+# Simple unit tests
+COPY unit_tests/ /tmp/unit_tests/
+COPY scripts/ /tmp/scripts/
+
+# Run prove to validate the reporting logic
+RUN prove -lr /tmp/unit_tests/
+
+# Copy script to a standard execution path
+COPY scripts/report_to_asana.pl /usr/local/bin/report_to_asana.pl
+RUN chmod +x /usr/local/bin/report_to_asana.pl
+
+# Set the default command to run the script
+ENTRYPOINT ["perl", "/usr/local/bin/report_to_asana.pl"]
