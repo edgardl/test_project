@@ -237,10 +237,11 @@ my $app = sub {
     ];
 };
 
-builder { sub {
+builder {
+    ;
     # Persistent even if the server restarts
     enable "Session", store => "File";
     enable "StackTrace";
     enable "ContentLength"; 
     $app;
-}};
+};

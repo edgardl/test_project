@@ -24,13 +24,21 @@ RUN cpanm --notest \
     Log::Any::Adapter
 
 # Nginx Config
-RUN rm /etc/nginx/nginx.conf /etc/nginx/sites-enabled/default
+RUN rm -f /etc/nginx/nginx.conf /etc/nginx/sites-enabled/default
 COPY configs/nginx-app.conf /etc/nginx/nginx.conf
-RUN mkdir -p /var/cache/nginx /var/run && \
-    chown -R www-data:www-data /var/cache/nginx /var/run
+
+# Create all Nginx directories
+RUN mkdir -p /etc/nginx/ssl /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx
+
+# Generate self-signed SSL Certificate
+RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/nginx.key \
+    -out /etc/nginx/ssl/nginx.crt \
+    -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
 
 # Nginx can run its worker processes and logs without root
-RUN chown -R www-data:www-data /var/lib/nginx /var/log/nginx
+RUN chown -R www-data:www-data /var/cache/nginx /var/run /var/log/nginx /var/lib/nginx /etc/nginx/ssl
+RUN chmod 600 /etc/nginx/ssl/nginx.key
 
 # App Setup
 # Copy script into the path runit and starman expect
