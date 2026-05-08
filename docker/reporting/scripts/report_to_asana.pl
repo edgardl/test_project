@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use DBI;
-use JSON;
+use JSON::MaybeXS;
 use HTTP::Tiny;
 use IO::Socket::SSL;
 use Mozilla::CA;
@@ -168,4 +168,4 @@ sub main {
 }
 
 # Everything starts here
-main();
+main() unless caller;

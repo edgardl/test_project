@@ -13,14 +13,14 @@ RUN apt-get update && apt-get install -y \
 # Perl modules
 RUN cpanm --notest \
     DBD::Pg \
+    HTTP::Tiny \
     JSON::MaybeXS \
     Net::SSLeay \
     IO::Socket::SSL \
     Test::More \
-    Mozilla::CA
-
-WORKDIR /app
-COPY scripts/report_to_asana.pl .
+    Mozilla::CA \
+    Log::Any \
+    Log::Any::Adapter
 
 # Simple unit tests
 COPY unit_tests/ /tmp/unit_tests/
