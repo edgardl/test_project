@@ -1,2 +1,6 @@
 #!/bin/sh
-exec chpst -u appuser starman --listen 127.0.0.1:8080 --workers 4 scripts/feedback_app.psgi
+exec chpst -u appuser starman --listen 127.0.0.1:8080 \
+     --workers 4 \
+     --access-log /var/log/app/access.log \
+     --error-log /var/log/app/feedback_app.log \
+     scripts/feedback_app.psgi

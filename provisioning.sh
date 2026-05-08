@@ -4,6 +4,7 @@ set -euo pipefail
 
 # Variables
 LOG_FILE="/var/log/provisioning.log"
+DOCKER_LOGS="/var/log/docker"
 NETWORK="feedback-network"
 DB_NAME="feedback"
 DB_HOST="postgres_db"
@@ -139,6 +140,17 @@ env_setup() {
     /usr/bin/docker rm -f "$DB_HOST" "$SERVICE_APP" >/dev/null 2>&1 || true
 }
 
+# Shared directory for docker container logs
+log_setup() {
+    log_info "Creating log directories for docker containers"
+    mkdir -p "$DOCKER_LOGS/$SERVICE_APP/{nginx,starman}"
+    mkdir -p "$DOCKER_LOGS/$DB_HOST"
+    mkdir -p "$DOCKER_LOGS/reporting_worker"
+    
+    # Ensure the directories are writable by the containers
+    chmod -R 777 "$DOCKER_LOGS"
+}
+
 start_db() {
     log_info "Starting PostgreSQL"
     /usr/bin/docker pull postgres:15
@@ -158,6 +170,7 @@ start_db() {
 		    --log-opt max-file=3 \
 		    --restart always \
 		    --volume "/var/lib/$DB_HOST:/var/lib/postgresql/data" \
+		    --volume "$DOCKER_LOGS/$SERVICE_APP:/var/log/postgresql" \
 		    --env-file "$APP_ENV_FILE" \
 		    postgres:15
     
@@ -201,7 +214,9 @@ start_app() {
 		    --log-opt max-size=10m \
 		    --log-opt max-file=3 \
 		    --restart always \
-		    -p 9999:9999 \
+		    --publish 9999:9999 \
+		    --volume "$DOCKER_LOGS/$SERVICE_APP/nginx:/var/log/nginx" \
+		    --volume "$DOCKER_LOGS/$SERVICE_APP/starman:/var/log/app" \
 		    --env-file "$APP_ENV_FILE" \
 		    "$app_artifact"
 }
@@ -211,9 +226,18 @@ worker_setup() {
     log_info "Pulling the worker artifact"
     log_debug "Image: $worker_artifact"
     /usr/bin/docker pull "$worker_artifact"
+    local log_file="$DOCKER_LOGS/reporting_worker/output.log"
+
+    # Build the docker command for cron entry
+    local docker_cmd="/usr/bin/docker run --rm"
+    docker_cmd="$docker_cmd --network $NETWORK"
+    docker_cmd="$docker_cmd --log-opt max-size=10m --log-opt max-file=3"
+    docker_cmd="$docker_cmd --env-file $APP_ENV_FILE"
+    docker_cmd="$docker_cmd --env-file $ASANA_ENV_FILE"
+    docker_cmd="$docker_cmd $worker_artifact"
 
     # Schedule the 24-hour report (1:00 AM)
-    local cron_cmd="0 1 * * * /usr/bin/docker run --rm --network $NETWORK --log-opt max-size=10m --log-opt max-file=3 --env-file $APP_ENV_FILE --env-file $ASANA_ENV_FILE $worker_artifact # reporting_worker_cron"
+    local cron_cmd="0 1 * * * $docker_cmd >> $log_file 2>&1 # reporting_worker_cron"
 
     # Add to crontab (only if it doesn't exist)
     if ! crontab -l 2>/dev/null | grep -q "reporting_worker_cron"; then
@@ -296,7 +320,8 @@ main() {
     log_info "Getting docker environment ready..."
     secrets_setup
     env_setup
-
+    log_setup
+    
     log_info "Starting services..."
     start_db
     start_app
