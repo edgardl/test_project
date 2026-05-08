@@ -54,6 +54,9 @@ RUN mkdir -p /etc/runit/runsvdir/default/starman/scripts
 COPY scripts/feedback_app.psgi /etc/runit/runsvdir/default/starman/scripts/
 RUN chown -R appuser:appuser /etc/runit/runsvdir/default/starman/scripts
 
+# For PSGI (starman) logs
+RUN mkdir -p /var/log/app && chown appuser:appuser /var/log/app
+
 # Setup Runit Services
 # Copy service scripts into the runit directory
 COPY services /etc/service/

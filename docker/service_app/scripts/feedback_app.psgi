@@ -9,10 +9,8 @@ use Digest::SHA qw(sha256_hex);
 use Log::Any qw($log);
 use Log::Any::Adapter;
 
-# TODO: Make sure quotes are consistent
-
-# Logging to stdout
-Log::Any::Adapter->set('Stdout');
+# Logging
+Log::Any::Adapter->set('Stderr');
 
 # DB variables
 my $DB_TABLE    = $ENV{DB_TABLE};
@@ -93,6 +91,18 @@ sub generate_csrf {
     return sha256_hex(rand() . time() . $$);
 }
 
+# Validate comment
+sub is_valid_comment {
+    my ($comment) = @_;
+    return 0 unless defined $comment;
+    
+    # Remove leading/trailing whitespace
+    $comment =~ s/^\s+|\s+$//g;
+    
+    # Make sure comment is not empty and is up to 500 characters
+    return (length($comment) > 0 && length($comment) <= 500) ? 1 : 0;
+}
+
 # Escape html data
 sub escape_html {
     my $s = shift // '';
@@ -105,7 +115,7 @@ sub escape_html {
     return $s;
 }
 
-my $app = sub {
+our $app = sub {
     my $env = shift;
     my $req = Plack::Request->new($env);
 
@@ -130,7 +140,7 @@ my $app = sub {
     if ($req->method eq 'POST' && $req->path_info eq '/submit') {
         my $params = $req->body_parameters;
 	$log->info("Submitting feedback");
-
+	
 	# Very basic honeypot check
 	if ($params->{hp_email_verification}) {
 	    $log->info("Looks like we got a bot, returning 200 but not saving anything");
@@ -151,6 +161,17 @@ my $app = sub {
 		['Forbidden: CSRF Failure']
 	    ];
         }
+
+	# Comments should be between 1 and 500 characters
+	if (!is_valid_comment($params->{comment})) {
+            $log->warn("Rejected invalid comment");
+            return [
+                400,
+                ['Content-Type' => 'text/plain'],
+                ['Bad Request: Invalid or empty comment']
+            ];
+        }
+
 
         eval {
             my $dbh = get_dbh();
