@@ -81,7 +81,7 @@ sub generate_notes {
         $report->{negative}, $report->{negative_pct}
     );
 
-    $log->debug(sprintf "Final report: \n\n%s\s", $report);
+    $log->debug(sprintf "Final report: \n\n%s\n", $report);
     return $notes
 }
 
@@ -134,7 +134,7 @@ sub main {
 
     # Asana variables
     $log->info("Loading asana variables");
-    my $asana_project = $ENV{ASANA_PROJECT};
+    my $asana_project = $ENV{ASANA_PROJECT_ID};
     my $asana_token   = $ENV{ASANA_TOKEN};
 
     my $dbh;
