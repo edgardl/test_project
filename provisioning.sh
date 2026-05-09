@@ -55,7 +55,7 @@ log_generic() {
     echo "$log_entry" | tee -a "$LOG_FILE"
 }
 
-# Mimick Perl/Python log levels
+# Mimic Perl/Python log levels
 log_info()  { log_generic "INFO"  "$1"; }
 log_warn()  { log_generic "WARN"  "$1"; }
 log_error() { log_generic "ERROR" "$1" >&2; }
@@ -143,7 +143,8 @@ env_setup() {
 # Shared directory for docker container logs
 log_setup() {
     log_info "Creating log directories for docker containers"
-    mkdir -p "$DOCKER_LOGS/$SERVICE_APP/{nginx,starman}"
+    mkdir -p "$DOCKER_LOGS/$SERVICE_APP/nginx"
+    mkdir -p "$DOCKER_LOGS/$SERVICE_APP/starman"
     mkdir -p "$DOCKER_LOGS/$DB_HOST"
     mkdir -p "$DOCKER_LOGS/reporting_worker"
     
@@ -170,9 +171,12 @@ start_db() {
 		    --log-opt max-file=3 \
 		    --restart always \
 		    --volume "/var/lib/$DB_HOST:/var/lib/postgresql/data" \
-		    --volume "$DOCKER_LOGS/$SERVICE_APP:/var/log/postgresql" \
+		    --volume "$DOCKER_LOGS/$DB_HOST:/var/log/postgresql" \
 		    --env-file "$APP_ENV_FILE" \
-		    postgres:15
+		    postgres:15 \
+		    -c logging_collector=on \
+		    -c log_directory=/var/log/postgresql \
+		    -c log_filename=postgresql.log
     
     log_info "Waiting for the container to start (30s timeout)..."
     local success="false"
@@ -216,7 +220,7 @@ start_app() {
 		    --restart always \
 		    --publish 9999:9999 \
 		    --volume "$DOCKER_LOGS/$SERVICE_APP/nginx:/var/log/nginx" \
-		    --volume "$DOCKER_LOGS/$SERVICE_APP/starman:/var/log/app" \
+		    --volume "$DOCKER_LOGS/$SERVICE_APP/starman:/var/log/service_app" \
 		    --env-file "$APP_ENV_FILE" \
 		    "$app_artifact"
 }
