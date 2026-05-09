@@ -8,7 +8,7 @@ DOCKER_LOGS="/var/log/docker"
 NETWORK="feedback-network"
 DB_NAME="feedback"
 DB_HOST="postgres_db"
-SERVICE_APP="test_project"
+SERVICE_APP="service_app"
 APP_ENV_FILE="/etc/$SERVICE_APP.env"
 ASANA_ENV_FILE="/etc/asana.env"
 VERBOSE="false"
@@ -293,6 +293,30 @@ secrets_setup() {
     done
 }
 
+integration_health() {
+    # Give the services five seconds to stabilize
+    sleep 5
+
+    # Confirm Nginx can reach starman and starman can reach the DB
+    local health_check=$(curl -s -k -o /dev/null -w "%{http_code}" https://localhost:9999/health)
+
+    if [ "$health_check" -eq 200 ]; then
+	log_info "Success: Service is healthy and connected to DB"
+    else
+	log_error "Failed: Received HTTP $health_check"
+	log_info "Checking if Nginx came up"
+	local unhealthy_nginx=$(/usr/bin/docker exec -it test_project ss -tulnp | grep -q "0.0.0.0:9999")
+	if $unhealthy_nginx; then
+	    log_error "Nginx appears to be down. Port 9999 is not open"
+	    log_error "Nginx logs under $DOCKER_LOGS/$SERVICE_APP/nginx should be reviewed"
+	    exit 1
+	fi
+	log_info "Nginx appears to be healthy. Seems like starman could be the problem"
+	log_error "Starman logs under $DOCKER_LOGS/$SERVICE_APP/starman should be reviewed"
+	exit 1
+    fi
+}
+
 main() {
     log_info "================ START ================"
     
@@ -329,6 +353,9 @@ main() {
 
     log_info "Cleaning up old docker images..."
     /usr/bin/docker image prune -f
+
+    log_info "Running final integration health checks..."
+    integration_health
     
     log_info "System ready!"
 
