@@ -3,4 +3,4 @@ exec chpst -u appuser starman --listen 127.0.0.1:8080 \
      --workers 4 \
      --access-log /var/log/service_app/access.log \
      --error-log /var/log/service_app/feedback_app.log \
-     scripts/feedback_app.psgi
+     /service_app/scripts/feedback_app.psgi

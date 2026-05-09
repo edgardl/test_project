@@ -51,11 +51,12 @@ RUN chmod 600 /etc/nginx/ssl/nginx.key
 # App Setup
 # Copy script into the path runit and starman expect
 RUN mkdir -p /etc/runit/runsvdir/default/starman/scripts
-COPY scripts/feedback_app.psgi /etc/runit/runsvdir/default/starman/scripts/
-RUN chown -R appuser:appuser /etc/runit/runsvdir/default/starman/scripts
+COPY scripts/feedback_app.psgi /service_app/scripts/
+RUN chown -R appuser:appuser /service_app
 
 # For PSGI (starman) logs
-RUN mkdir -p /var/log/app && chown appuser:appuser /var/log/app
+RUN mkdir -p /var/log/service_app
+RUN chown appuser:appuser /var/log/service_app
 
 # Setup Runit Services
 # Copy service scripts into the runit directory

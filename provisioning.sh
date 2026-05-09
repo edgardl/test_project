@@ -305,7 +305,7 @@ integration_health() {
     else
 	log_error "Failed: Received HTTP $health_check"
 	log_info "Checking if Nginx came up"
-	local unhealthy_nginx=$(/usr/bin/docker exec -it test_project ss -tulnp | grep -q "0.0.0.0:9999")
+	local unhealthy_nginx=$(/usr/bin/docker exec -it $SERVICE_APP ss -tulnp | grep -q "0.0.0.0:9999")
 	if $unhealthy_nginx; then
 	    log_error "Nginx appears to be down. Port 9999 is not open"
 	    log_error "Nginx logs under $DOCKER_LOGS/$SERVICE_APP/nginx should be reviewed"
