@@ -243,16 +243,15 @@ worker_setup() {
     # Schedule the 24-hour report (1:00 AM)
     local cron_cmd="0 1 * * * $docker_cmd >> $log_file 2>&1 # reporting_worker_cron"
 
-    # Add to crontab (only if it doesn't exist)
-    if ! crontab -l 2>/dev/null | grep -q "reporting_worker_cron"; then
-        log_info "Adding crontab entry for reporting worker"
-        log_debug "Entry: $cron_cmd"
-        (crontab -l 2>/dev/null || true; echo "$cron_cmd") | crontab -
-    fi
+    # Always replace the crontab entry to ensure configuration is current
+    log_info "Updating crontab entry for reporting worker"
+    log_debug "Entry: $cron_cmd"
+    
+    # Extract current crontab, remove any existing worker entry, and append the new one
+    (crontab -l 2>/dev/null | grep -v "reporting_worker_cron" || true; echo "$cron_cmd") | crontab -
 }
 
 secrets_setup() {
-    local project_id="test_project"
     local db_password
 
     # Check if the password was previously generated (We don't want to lose an existing DB)
@@ -285,7 +284,7 @@ secrets_setup() {
     
     log_info "Populating protected Asana environment file"
     {
-	echo "ASANA_PROJECT_ID=$project_id"
+	echo "ASANA_PROJECT_ID=$ASANA_PROJECT_ID"
         echo "ASANA_TOKEN=$ASANA_TOKEN"
     } > "$tmp_asana_file"
     mv "$tmp_asana_file" "$ASANA_ENV_FILE"
@@ -321,23 +320,44 @@ integration_health() {
     fi
 }
 
+validate_asana() {
+    local config_file="/etc/asana"
+
+    log_info "Checking Asana configuration"
+
+    # Enter if any of the Asana variables are missing
+    if [[ -z "${ASANA_TOKEN:-}" ]] || [[ -z "${ASANA_PROJECT_ID:-}" ]]; then
+        log_info "Attempting to read Asana information from $config_file"
+        
+        if [[ -f "$config_file" ]]; then
+            [[ -z "${ASANA_TOKEN:-}" ]] && ASANA_TOKEN=$(sed -n "/token=/ s/^token=\(.*\)$/\1/p" "$config_file" || true)
+            [[ -z "${ASANA_PROJECT_ID:-}" ]] && ASANA_PROJECT_ID=$(sed -n "/project_id=/ s/^project_id=\(.*\)$/\1/p" "$config_file" || true)
+        fi
+	
+        if { [[ -z "${ASANA_TOKEN:-}" ]] || [[ -z "${ASANA_PROJECT_ID:-}" ]]; } && [[ -f "$ASANA_ENV_FILE" ]]; then
+            log_info "Searching $ASANA_ENV_FILE for previous values"
+            [[ -z "${ASANA_TOKEN:-}" ]] && ASANA_TOKEN=$(grep "ASANA_TOKEN=" "$ASANA_ENV_FILE" | cut -d'=' -f2 || true)
+            [[ -z "${ASANA_PROJECT_ID:-}" ]] && ASANA_PROJECT_ID=$(grep "ASANA_PROJECT_ID=" "$ASANA_ENV_FILE" | cut -d'=' -f2 || true)
+            
+            if [[ -n "${ASANA_TOKEN:-}" ]] && [[ -n "${ASANA_PROJECT_ID:-}" ]]; then
+                log_warn "Asana data loaded from previous run ($ASANA_ENV_FILE). Values could be stale!"
+            fi
+        fi
+    else
+        log_info "Asana token and project id loaded from environment variables"
+    fi
+
+    # Final validation
+    if [[ -z "${ASANA_TOKEN:-}" ]] || [[ -z "${ASANA_PROJECT_ID:-}" ]]; then
+        log_error "Missing Asana configuration. Ensure token and project_id are set"
+        show_help
+        exit 1
+    fi
+}
+
 main() {
     log_info "================ START ================"
-    
-    # Validate Asana token is present before doing anything
-    if [[ -z "${ASANA_TOKEN:-}" ]]; then
-        if [[ -f "$ASANA_ENV_FILE" ]]; then
-            log_info "Using existing ASANA_TOKEN from $ASANA_ENV_FILE"
-            ASANA_TOKEN=$(grep "ASANA_TOKEN=" "$ASANA_ENV_FILE" | cut -d'=' -f2)
-        elif [[ -f "/etc/asana" ]]; then
-            log_info "Reading ASANA_TOKEN from /etc/asana"
-            ASANA_TOKEN=$(cat /etc/asana)
-        else
-            log_error "ASANA_TOKEN required. Pass it as a variable, or put it in /etc/asana"
-	    show_help
-            exit 1
-        fi
-    fi
+    validate_asana
     
     log_info "Getting the system ready..."
     system_setup
@@ -372,14 +392,19 @@ main() {
 
 show_help() {
     cat << EOF
-Usage: ASANA_TOKEN=your_token_here ./provisioning_3.sh [options]
+Usage: ASANA_TOKEN=token_here ASANA_PROJECT_ID=your_project_id ./provisioning_3.sh [options]
 
 This script provisions the feedback system on an Ubuntu server.
 
 Requirements:
-  ASANA_TOKEN    If this is an initial setup, the token must be
-                 passed as an environment variable OR stored in
-                 /etc/asana file.
+
+  ASANA_TOKEN        If this is an initial setup, the token must be
+                     passed as an environment variable OR stored in
+                     /etc/asana file => token=<token_here>.
+
+  ASANA_PROJECT_ID   If this is an initial setup, the id must be
+                     passed as an environment variable OR stored in
+                     /etc/asana file => project_id=<id here>.
 
 Options:
   -v             Enable verbose (DEBUG) mode for detailed logging.
