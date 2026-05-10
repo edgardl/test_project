@@ -1,0 +1,133 @@
+name: 'Terraform CI/CD'
+
+on:
+  pull-request:
+    branches: [ "master" ]
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform Action to perform'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+        - plan
+        - apply
+        - destroy
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write # Allows GitHub to post Plan results to the PR comments
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1. Build and push the Service App (Nginx + Perl)
+      - name: Build Service App
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/service_app
+          file: ./docker/service_app/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/feedback-app:latest
+            ghcr.io/${{ github.repository }}/feedback-app:${{ github.sha }}
+
+      # 2. Build and push the Reporting Worker
+      - name: Build Reporting Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/reporting
+          file: ./docker/reporting/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/reporting-worker:latest
+            ghcr.io/${{ github.repository }}/reporting-worker:${{ github.sha }}
+  
+  terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infrastructure
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      run: terraform init
+
+      # Run plan on PRs and Merges to catch errors early
+    - name: Terraform Plan
+      id: plan
+      run: terraform plan -no-color
+      continue-on-error: true
+
+    # Run apply and capture output
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      id: apply
+      env:
+        TF_VAR_github_token: ${{ secrets.GH_PAT }}
+        TF_VAR_github_user: ${{ github.actor }}
+        TF_VAR_github_repo_name: ${{ github.event.repository.name }}
+        TF_VAR_db_feedback_table: 'ddg_feedback'
+      run: |
+        terraform apply -auto-approve
+        VMS_LIST=$(terraform output -json vm_names | jq -r 'join(" ")')
+        echo "VMS=$VMS_LIST" >> $GITHUB_ENV
+
+    # Feed the loop
+    - name: 'Authorize VM Identities (Dynamic SQL)'
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      run: |
+        for VM_NAME in $VMS; do
+          echo "Authorizing $VM_NAME..."
+          
+          QUERY=$(cat <<-SQL
+            DO \$\$ 
+            BEGIN 
+              IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$VM_NAME') THEN 
+                SET aad_validate_oids_in_tenant = off; 
+                CREATE ROLE "$VM_NAME" WITH LOGIN PASSWORD 'n/a' IN ROLE azure_ad_user; 
+              END IF; 
+            END \$\$; 
+            GRANT ALL PRIVILEGES ON DATABASE "feedback-db" TO "$VM_NAME";
+SQL
+          )
+
+          az postgres flexible-server execute \
+            --name feedback-db-server \
+            --resource-group ddg_group \
+            --admin-user edgar_dorantes_@hotmail.com \
+            --database-name feedback-db \
+            --querytext "$QUERY"
+        done
