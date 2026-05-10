@@ -240,8 +240,8 @@ worker_setup() {
     docker_cmd="$docker_cmd --env-file $ASANA_ENV_FILE"
     docker_cmd="$docker_cmd $worker_artifact"
 
-    # Schedule the 24-hour report (1:00 AM)
-    local cron_cmd="0 1 * * * $docker_cmd >> $log_file 2>&1 # reporting_worker_cron"
+    # Schedule the 24-hour report
+    local cron_cmd="0 21 * * * $docker_cmd >> $log_file 2>&1 # reporting_worker_cron"
 
     # Always replace the crontab entry to ensure configuration is current
     log_info "Updating crontab entry for reporting worker"
