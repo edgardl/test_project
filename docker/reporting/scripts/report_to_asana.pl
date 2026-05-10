@@ -18,9 +18,6 @@ sub get_connector {
     my $db_user = 'postgres';
     my $dsn = "DBI:Pg:dbname=$db_name;host=$db_host;port=5432";
     
-    # TEMP - DELETE ME
-    $log->debug(sprintf "Password length: %d", length($db_password // ''));
-
     return DBIx::Connector->new($dsn, $db_user, $db_password, {
         RaiseError => 1,
         AutoCommit => 1,
