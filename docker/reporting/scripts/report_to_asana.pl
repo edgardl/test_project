@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use DBI;
+use DBIx::Connector;
 use JSON::MaybeXS;
 use HTTP::Tiny;
 use IO::Socket::SSL;
@@ -12,18 +13,19 @@ use Log::Any::Adapter;
 Log::Any::Adapter->set('Stdout');
 
 # Establish DB connection
-sub get_dbh {
+sub get_connector {
     my ($db_host, $db_name, $db_password) = @_;
-    $log->info("Creating DB handler");
     my $db_user = 'postgres';
     my $dsn = "DBI:Pg:dbname=$db_name;host=$db_host;port=5432";
-    $log->debug(sprintf "DSN string => \"%s\"", $dsn);
-    my $dbh = DBI->connect($dsn, $db_user, $db_password, {
-	RaiseError => 1,
-	AutoCommit => 1,
-	PrintError => 0
+    
+    # TEMP - DELETE ME
+    $log->debug(sprintf "Password length: %d", length($db_password // ''));
+
+    return DBIx::Connector->new($dsn, $db_user, $db_password, {
+        RaiseError => 1,
+        AutoCommit => 1,
+        PrintError => 0,
     });
-    return $dbh;
 }
 
 # Perform Reporting Logic
@@ -81,7 +83,7 @@ sub generate_notes {
         $report->{negative}, $report->{negative_pct}
     );
 
-    $log->debug(sprintf "Final report: \n\n%s\n", $report);
+    $log->debug(sprintf "Final report: \n\n%s\n", $notes);
     return $notes
 }
 
@@ -137,9 +139,11 @@ sub main {
     my $asana_project = $ENV{ASANA_PROJECT_ID};
     my $asana_token   = $ENV{ASANA_TOKEN};
 
+    my $conn = get_connector($db_host, $db_name, $db_password);
     my $dbh;
+    
     eval {
-	$dbh = get_dbh($db_host, $db_name, $db_password);
+	$dbh = $conn->dbh;
 	my $feedback_report = get_feedback_report($dbh, $db_table);
 	
 	if ($feedback_report->{total} > 0) {
