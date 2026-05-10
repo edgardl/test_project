@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y \
 
 # Perl modules
 RUN cpanm --notest \
+    DBI \
     DBD::Pg \
+    DBIx::Connector \
     HTTP::Tiny \
     JSON::MaybeXS \
     Net::SSLeay \
